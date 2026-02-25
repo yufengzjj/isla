@@ -224,8 +224,8 @@ impl PageAttrs for S1PageAttrs {
         let mut set = 0;
         let mut unknown = 0;
 
-        attr_bool!(self.uxn, 53, set, unknown);
-        attr_bool!(self.pxn, 54, set, unknown);
+        attr_bool!(self.uxn, 54, set, unknown);
+        attr_bool!(self.pxn, 53, set, unknown);
         attr_bool!(self.contiguous, 52, set, unknown);
         attr_bool!(self.n_g, 11, set, unknown);
         attr_bool!(self.af, 10, set, unknown);
@@ -247,7 +247,7 @@ impl PageAttrs for S1PageAttrs {
 
         // Bit 53 is PXN (Privileged execute-never)
         if let Some(pxn) = self.pxn {
-            solver.assert_eq(Extract(54, 54, Box::new(Var(desc))), bool_to_bit(pxn))
+            solver.assert_eq(Extract(53, 53, Box::new(Var(desc))), bool_to_bit(pxn))
         }
 
         // Bit 52 is the contiguous bit
@@ -353,7 +353,7 @@ impl PageAttrs for S2PageAttrs {
         }
 
         // Bit 11 is always 0
-        solver.assert_eq(Extract(53, 53, Box::new(Var(desc))), bits64(0, 1));
+        solver.assert_eq(Extract(11, 11, Box::new(Var(desc))), bits64(0, 1));
 
         // Bit 10 is AF (access flag)
         if let Some(af) = self.af {
