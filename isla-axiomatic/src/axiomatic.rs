@@ -48,7 +48,7 @@ use isla_mml::memory_model;
 use crate::graph::GraphOpts;
 use crate::litmus::exp::Loc as LitmusLoc;
 use crate::litmus::Litmus;
-use crate::page_table::VirtualAddress;
+use crate::page_table::{PageAttrs, S1PageAttrs, S2PageAttrs, VirtualAddress};
 use crate::sexp::{InterpretError, SexpVal};
 use crate::smt_model::Model;
 
@@ -640,6 +640,31 @@ impl<'ev, B: BV> ExecutionInfo<'ev, B> {
         Translations::from_events(self.smt_events.iter().chain(self.other_events.iter()))
     }
 
+    /// Check if a PTE's initial value has non-default page/block descriptor
+    /// attributes. In isla, table descriptor attributes are hard-coded to
+    /// only the Valid bit being set, so attr_bits == 1 identifies entries
+    /// that are (almost certainly) table descriptors and these should not
+    /// be automatically interesting. A page/block descriptor with all
+    /// attributes zeroed except Valid would also match and be incorrectly
+    /// filtered out. This is a trade-off to avoid adding a large number
+    /// of uninteresting walk events.
+    fn pte_has_non_default_attrs(
+        initial: u64,
+        region: &str,
+        s1_attr_mask: u64,
+        s1_default: u64,
+        s2_attr_mask: u64,
+        s2_default: u64,
+    ) -> bool {
+        let (attr_mask, default) =
+            if region == "stage 1" { (s1_attr_mask, s1_default) } else { (s2_attr_mask, s2_default) };
+        let attr_bits = initial & attr_mask;
+        // attr_bits == 1: likely a table descriptor
+        // attr_bits == default: standard page/block attrs
+        // Note: an invalid entry (Valid=0) is non-default and interesting
+        attr_bits != 1 && attr_bits != default
+    }
+
     /// A transate event is uninteresting if it is guaranteed to read
     /// from the initial state. There are two modes for this function,
     /// if keep_entire_translation is true we will keep all the events
@@ -670,6 +695,12 @@ impl<'ev, B: BV> ExecutionInfo<'ev, B> {
         let mut write_addr_pgtable_setup: HashSet<u64> = HashSet::new();
         write_addr_pgtable_setup.extend(updated);
 
+        // Compute attribute masks and defaults for detecting non-default PTE attrs.
+        let (_, s1_attr_mask) = S1PageAttrs::unknown().bits();
+        let (s1_default, _) = S1PageAttrs::default().bits();
+        let (_, s2_attr_mask) = S2PageAttrs::unknown().bits();
+        let (s2_default, _) = S2PageAttrs::default().bits();
+
         let mut interesting = Vec::new();
         let mut uninteresting = Vec::new();
 
@@ -677,11 +708,21 @@ impl<'ev, B: BV> ExecutionInfo<'ev, B> {
             let mut interesting_translation = HashSet::new();
             for ax_event in self.smt_events.iter().filter(|ev| ev.translate.is_some()) {
                 match ax_event.base() {
-                    Some(Event::ReadMem { address: Val::Bits(bv), .. }) => {
+                    Some(Event::ReadMem { address: Val::Bits(bv), region, .. }) => {
+                        let initial = match memory.read_initial(bv.lower_u64(), 8) {
+                            Ok(Val::Bits(b)) => b.lower_u64(),
+                            _ => 0,
+                        };
                         if write_addrs.contains(bv)
                             || write_addr_pgtable_setup.contains(&bv.lower_u64())
-                            || memory.read_initial(bv.lower_u64(), 8).unwrap_or_else(|_| Val::Bits(B::from_u64(0)))
-                                == Val::Bits(B::from_u64(0))
+                            || Self::pte_has_non_default_attrs(
+                                initial,
+                                region,
+                                s1_attr_mask,
+                                s1_default,
+                                s2_attr_mask,
+                                s2_default,
+                            )
                         {
                             interesting_translation.insert(ax_event.translate.unwrap());
                         }
@@ -703,11 +744,21 @@ impl<'ev, B: BV> ExecutionInfo<'ev, B> {
                     interesting.push(ax_event)
                 } else {
                     match ax_event.base() {
-                        Some(Event::ReadMem { address: Val::Bits(bv), .. }) => {
+                        Some(Event::ReadMem { address: Val::Bits(bv), region, .. }) => {
+                            let initial = match memory.read_initial(bv.lower_u64(), 8) {
+                                Ok(Val::Bits(b)) => b.lower_u64(),
+                                _ => 0,
+                            };
                             if write_addrs.contains(bv)
                                 || write_addr_pgtable_setup.contains(&bv.lower_u64())
-                                || memory.read_initial(bv.lower_u64(), 8).unwrap_or_else(|_| Val::Bits(B::from_u64(0)))
-                                    == Val::Bits(B::from_u64(0))
+                                || Self::pte_has_non_default_attrs(
+                                    initial,
+                                    region,
+                                    s1_attr_mask,
+                                    s1_default,
+                                    s2_attr_mask,
+                                    s2_default,
+                                )
                             {
                                 interesting.push(ax_event)
                             } else {
