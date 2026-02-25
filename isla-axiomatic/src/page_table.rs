@@ -58,25 +58,29 @@ pub struct S1PageAttrs {
     uxn: Option<bool>, // UXN in EL1&0 translation regime, XN in others
     pxn: Option<bool>,
     contiguous: Option<bool>,
+    dbm: Option<bool>,
     n_g: Option<bool>,
     af: Option<bool>,
     sh: Option<u8>,
     ap: Option<u8>,
     ns: Option<bool>,
     attr_indx: Option<u8>,
+    valid: Option<bool>,
 }
 
 // Names identical to ARM ARM
-const S1_PAGE_ATTR_FIELDS: [(&str, u64, u64); 9] = [
+const S1_PAGE_ATTR_FIELDS: [(&str, u64, u64); 11] = [
     ("UXN", 54, 54),
     ("PXN", 53, 53),
     ("Contiguous", 52, 52),
+    ("DBM", 51, 51),
     ("nG", 11, 11),
     ("AF", 10, 10),
     ("SH", 9, 8),
     ("AP", 7, 6),
     ("NS", 5, 5),
     ("AttrIndx", 4, 2),
+    ("Valid", 0, 0),
 ];
 
 impl Default for S1PageAttrs {
@@ -85,12 +89,14 @@ impl Default for S1PageAttrs {
             uxn: Some(false),
             pxn: Some(false),
             contiguous: Some(false),
+            dbm: Some(false),
             n_g: Some(false),
             af: Some(true),
             sh: Some(0b00),
             ap: Some(0b01),
             ns: Some(false),
             attr_indx: Some(0b000),
+            valid: Some(true),
         }
     }
 }
@@ -101,12 +107,14 @@ impl S1PageAttrs {
             uxn: Some(false),
             pxn: Some(false),
             contiguous: Some(false),
+            dbm: Some(false),
             n_g: Some(false),
             af: Some(true),
             sh: Some(0b00),
             ap: Some(0b11),
             ns: Some(false),
             attr_indx: Some(0b000),
+            valid: Some(true),
         }
     }
 }
@@ -115,26 +123,38 @@ impl S1PageAttrs {
 pub struct S2PageAttrs {
     xn: Option<bool>,
     contiguous: Option<bool>,
+    dbm: Option<bool>,
     af: Option<bool>,
     sh: Option<u8>,
     s2ap: Option<u8>,
     mem_attr: Option<u8>,
+    valid: Option<bool>,
 }
 
 // Names identical to ARM ARM
-const S2_PAGE_ATTR_FIELDS: [(&str, u64, u64); 6] =
-    [("XN", 54, 54), ("Contiguous", 52, 52), ("AF", 10, 10), ("SH", 9, 8), ("S2AP", 7, 6), ("MemAttr", 5, 2)];
+const S2_PAGE_ATTR_FIELDS: [(&str, u64, u64); 8] = [
+    ("XN", 54, 54),
+    ("Contiguous", 52, 52),
+    ("DBM", 51, 51),
+    ("AF", 10, 10),
+    ("SH", 9, 8),
+    ("S2AP", 7, 6),
+    ("MemAttr", 5, 2),
+    ("Valid", 0, 0),
+];
 
 impl Default for S2PageAttrs {
     fn default() -> Self {
         S2PageAttrs {
             xn: Some(false),
             contiguous: Some(false),
+            dbm: Some(false),
             af: Some(true),
             sh: Some(0b00),
             s2ap: Some(0b11),
             // normal/normal write-through read/write-allocate non-transient memory
             mem_attr: Some(0b1111),
+            valid: Some(true),
         }
     }
 }
@@ -144,11 +164,13 @@ impl S2PageAttrs {
         S2PageAttrs {
             xn: Some(false),
             contiguous: Some(false),
+            dbm: Some(false),
             af: Some(true),
             sh: Some(0b00),
             s2ap: Some(0b00),
             // normal/normal write-through read/write-allocate non-transient memory
             mem_attr: Some(0b1111),
+            valid: Some(true),
         }
     }
 }
@@ -207,12 +229,14 @@ impl PageAttrs for S1PageAttrs {
             uxn: None,
             pxn: None,
             contiguous: None,
+            dbm: None,
             n_g: None,
             af: None,
             sh: None,
             ap: None,
             ns: None,
             attr_indx: None,
+            valid: None,
         }
     }
 
@@ -227,12 +251,14 @@ impl PageAttrs for S1PageAttrs {
         attr_bool!(self.uxn, 54, set, unknown);
         attr_bool!(self.pxn, 53, set, unknown);
         attr_bool!(self.contiguous, 52, set, unknown);
+        attr_bool!(self.dbm, 51, set, unknown);
         attr_bool!(self.n_g, 11, set, unknown);
         attr_bool!(self.af, 10, set, unknown);
         attr_u8!(self.sh, 9, 8, set, unknown);
         attr_u8!(self.ap, 7, 6, set, unknown);
         attr_bool!(self.ns, 5, set, unknown);
         attr_u8!(self.attr_indx, 4, 2, set, unknown);
+        attr_bool!(self.valid, 0, set, unknown);
 
         (set, unknown)
     }
@@ -253,6 +279,11 @@ impl PageAttrs for S1PageAttrs {
         // Bit 52 is the contiguous bit
         if let Some(contiguous) = self.contiguous {
             solver.assert_eq(Extract(52, 52, Box::new(Var(desc))), bool_to_bit(contiguous))
+        }
+
+        // Bit 51 is DBM (Dirty Bit Modifier)
+        if let Some(dbm) = self.dbm {
+            solver.assert_eq(Extract(51, 51, Box::new(Var(desc))), bool_to_bit(dbm))
         }
 
         // Bit 11 is nG (not global bit)
@@ -284,6 +315,11 @@ impl PageAttrs for S1PageAttrs {
         if let Some(attr_indx) = self.attr_indx {
             solver.assert_eq(Extract(4, 2, Box::new(Var(desc))), bits64(attr_indx as u64 & 0b111, 3))
         }
+
+        // Bit 0 is Valid
+        if let Some(valid) = self.valid {
+            solver.assert_eq(Extract(0, 0, Box::new(Var(desc))), bool_to_bit(valid))
+        }
     }
 
     fn set_field<B: BV>(&mut self, attr: &str, bits: B) -> Option<()> {
@@ -300,12 +336,14 @@ impl PageAttrs for S1PageAttrs {
             "UXN" => self.uxn = Some(!bits.is_zero()),
             "PXN" => self.pxn = Some(!bits.is_zero()),
             "Contiguous" => self.contiguous = Some(!bits.is_zero()),
+            "DBM" => self.dbm = Some(!bits.is_zero()),
             "nG" => self.n_g = Some(!bits.is_zero()),
             "AF" => self.af = Some(!bits.is_zero()),
             "SH" => self.sh = Some(bits.lower_u8()),
             "AP" => self.ap = Some(bits.lower_u8()),
             "NS" => self.ns = Some(!bits.is_zero()),
             "AttrIndx" => self.attr_indx = Some(bits.lower_u8()),
+            "Valid" => self.valid = Some(!bits.is_zero()),
             _ => unreachable!(),
         }
 
@@ -315,7 +353,16 @@ impl PageAttrs for S1PageAttrs {
 
 impl PageAttrs for S2PageAttrs {
     fn unknown() -> Self {
-        S2PageAttrs { xn: None, contiguous: None, af: None, sh: None, s2ap: None, mem_attr: None }
+        S2PageAttrs {
+            xn: None,
+            contiguous: None,
+            dbm: None,
+            af: None,
+            sh: None,
+            s2ap: None,
+            mem_attr: None,
+            valid: None,
+        }
     }
 
     fn fields() -> &'static [(&'static str, u64, u64)] {
@@ -328,10 +375,12 @@ impl PageAttrs for S2PageAttrs {
 
         attr_bool!(self.xn, 54, set, unknown);
         attr_bool!(self.contiguous, 52, set, unknown);
+        attr_bool!(self.dbm, 51, set, unknown);
         attr_bool!(self.af, 10, set, unknown);
         attr_u8!(self.sh, 9, 8, set, unknown);
         attr_u8!(self.s2ap, 7, 6, set, unknown);
         attr_u8!(self.mem_attr, 5, 2, set, unknown);
+        attr_bool!(self.valid, 0, set, unknown);
 
         (set, unknown)
     }
@@ -350,6 +399,11 @@ impl PageAttrs for S2PageAttrs {
         // Bit 52 is the contiguous bit
         if let Some(contiguous) = self.contiguous {
             solver.assert_eq(Extract(52, 52, Box::new(Var(desc))), bool_to_bit(contiguous))
+        }
+
+        // Bit 51 is DBM (Dirty Bit Modifier)
+        if let Some(dbm) = self.dbm {
+            solver.assert_eq(Extract(51, 51, Box::new(Var(desc))), bool_to_bit(dbm))
         }
 
         // Bit 11 is always 0
@@ -374,6 +428,11 @@ impl PageAttrs for S2PageAttrs {
         if let Some(mem_attr) = self.mem_attr {
             solver.assert_eq(Extract(5, 2, Box::new(Var(desc))), bits64(mem_attr as u64 & 0b1111, 4))
         }
+
+        // Bit 0 is Valid
+        if let Some(valid) = self.valid {
+            solver.assert_eq(Extract(0, 0, Box::new(Var(desc))), bool_to_bit(valid))
+        }
     }
 
     fn set_field<B: BV>(&mut self, attr: &str, bits: B) -> Option<()> {
@@ -389,10 +448,12 @@ impl PageAttrs for S2PageAttrs {
         match attr {
             "XN" => self.xn = Some(!bits.is_zero()),
             "Contiguous" => self.contiguous = Some(!bits.is_zero()),
+            "DBM" => self.dbm = Some(!bits.is_zero()),
             "AF" => self.af = Some(!bits.is_zero()),
             "SH" => self.sh = Some(bits.lower_u8()),
             "S2AP" => self.s2ap = Some(bits.lower_u8()),
             "MemAttr" => self.mem_attr = Some(bits.lower_u8()),
+            "Valid" => self.valid = Some(!bits.is_zero()),
             _ => unreachable!(),
         }
 
@@ -442,7 +503,7 @@ pub fn page_desc_bits<P: PageAttrs>(page: u64, attrs: P) -> Option<u64> {
     let (attrs, unknowns) = attrs.bits();
 
     if unknowns == 0 {
-        Some((page & mask) | 0b11 | attrs)
+        Some((page & mask) | 0b10 | attrs)
     } else {
         None
     }
@@ -456,7 +517,7 @@ pub fn block_desc_bits<P: PageAttrs>(page: u64, attrs: P, level: u64) -> Option<
     let (attrs, unknowns) = attrs.bits();
 
     if unknowns == 0 {
-        Some((page & mask) | 0b01 | attrs)
+        Some((page & mask) | attrs)
     } else {
         None
     }

@@ -456,7 +456,7 @@ fn mkdesc3<B: BV, P: Default + PageAttrs>(
     let (attrs, _) = attrs.bits();
 
     primop::or_bits(
-        primop::or_bits(oa, Val::Bits(B::from_u64(0b11)), solver, SourceLoc::unknown())?,
+        primop::or_bits(oa, Val::Bits(B::from_u64(0b10)), solver, SourceLoc::unknown())?,
         Val::Bits(B::from_u64(attrs)),
         solver,
         SourceLoc::unknown(),
