@@ -528,13 +528,45 @@ pub fn global_set_param_value(id: &str, value: &str) {
 }
 
 /// Context is a wrapper around `Z3_context`.
+///
+/// When `owned` is true (the default, produced by `Context::new`), `Drop`
+/// calls `Z3_del_context` on the underlying pointer. When `owned` is false
+/// (produced by `Context::from_raw_borrowed`), the underlying `Z3_context`
+/// is treated as borrowed from an external owner — `Drop` does nothing and
+/// the external owner is responsible for eventually deleting it. This lets
+/// isla share a single Z3 context with another Rust crate (e.g. `z3-rust`)
+/// that already manages the `Z3_context` lifetime.
 pub struct Context {
     z3_ctx: Z3_context,
+    owned: bool,
 }
 
 impl Context {
     pub fn new(cfg: Config) -> Self {
-        unsafe { Context { z3_ctx: Z3_mk_context_rc(cfg.z3_cfg).unwrap() } }
+        unsafe { Context { z3_ctx: Z3_mk_context_rc(cfg.z3_cfg).unwrap(), owned: true } }
+    }
+
+    /// Wrap an externally-owned `Z3_context` without taking ownership.
+    ///
+    /// # Safety
+    ///
+    /// - The caller must guarantee that the underlying `Z3_context` was
+    ///   created with `Z3_mk_context_rc` (refcounted mode); isla assumes
+    ///   refcounted mode for all AST nodes it allocates.
+    /// - The caller must guarantee that the `Z3_context` outlives every
+    ///   `Solver`, `Model`, and any other isla type that borrows this
+    ///   `Context`.
+    /// - The caller is responsible for eventually calling
+    ///   `Z3_del_context` (or letting whichever Rust wrapper owns it do
+    ///   so). The returned `Context`'s `Drop` is a no-op.
+    pub unsafe fn from_raw_borrowed(z3_ctx: Z3_context) -> Self {
+        Context { z3_ctx, owned: false }
+    }
+
+    /// Access the underlying raw `Z3_context` pointer. Useful for callers
+    /// that want to hand the pointer to another Z3 binding.
+    pub fn as_raw(&self) -> Z3_context {
+        self.z3_ctx
     }
 
     fn error(&self) -> ExecError {
@@ -549,7 +581,9 @@ impl Context {
 
 impl Drop for Context {
     fn drop(&mut self) {
-        unsafe { Z3_del_context(self.z3_ctx) }
+        if self.owned {
+            unsafe { Z3_del_context(self.z3_ctx) }
+        }
     }
 }
 
