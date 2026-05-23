@@ -497,7 +497,7 @@ pub struct Config {
 
 impl Config {
     pub fn new() -> Self {
-        unsafe { Config { z3_cfg: Z3_mk_config() } }
+        unsafe { Config { z3_cfg: Z3_mk_config().unwrap() } }
     }
 }
 
@@ -534,7 +534,7 @@ pub struct Context {
 
 impl Context {
     pub fn new(cfg: Config) -> Self {
-        unsafe { Context { z3_ctx: Z3_mk_context_rc(cfg.z3_cfg) } }
+        unsafe { Context { z3_ctx: Z3_mk_context_rc(cfg.z3_cfg).unwrap() } }
     }
 
     fn error(&self) -> ExecError {
@@ -574,8 +574,8 @@ impl<'ctx> Enums<'ctx> {
             let ctx = self.ctx.z3_ctx;
             let size = members.len();
 
-            let z3_name = Z3_mk_int_symbol(ctx, z3_name.id as c_int);
-            let members: Vec<Z3_symbol> = members.iter().map(|m| Z3_mk_int_symbol(ctx, m.id as c_int)).collect();
+            let z3_name = Z3_mk_int_symbol(ctx, z3_name.id as c_int).unwrap();
+            let members: Vec<Z3_symbol> = members.iter().map(|m| Z3_mk_int_symbol(ctx, m.id as c_int).unwrap()).collect();
 
             let mut consts = mem::ManuallyDrop::new(Vec::with_capacity(size));
             let mut testers = mem::ManuallyDrop::new(Vec::with_capacity(size));
@@ -587,16 +587,16 @@ impl<'ctx> Enums<'ctx> {
                 members.as_ptr(),
                 consts.as_mut_ptr(),
                 testers.as_mut_ptr(),
-            );
+            ).unwrap();
 
             let consts = Vec::from_raw_parts(consts.as_mut_ptr(), size, size);
             let testers = Vec::from_raw_parts(testers.as_mut_ptr(), size, size);
 
             for i in 0..size {
-                Z3_inc_ref(ctx, Z3_func_decl_to_ast(ctx, consts[i]));
-                Z3_inc_ref(ctx, Z3_func_decl_to_ast(ctx, testers[i]))
+                Z3_inc_ref(ctx, Z3_func_decl_to_ast(ctx, consts[i]).unwrap());
+                Z3_inc_ref(ctx, Z3_func_decl_to_ast(ctx, testers[i]).unwrap())
             }
-            Z3_inc_ref(ctx, Z3_sort_to_ast(ctx, sort));
+            Z3_inc_ref(ctx, Z3_sort_to_ast(ctx, sort).unwrap());
 
             self.enums.insert(name, Enum { sort, consts, testers });
         }
@@ -609,10 +609,10 @@ impl Drop for Enums<'_> {
             let ctx = self.ctx.z3_ctx;
             for (_, e) in self.enums.drain() {
                 for i in 0..e.consts.len() {
-                    Z3_dec_ref(ctx, Z3_func_decl_to_ast(ctx, e.consts[i]));
-                    Z3_dec_ref(ctx, Z3_func_decl_to_ast(ctx, e.testers[i]))
+                    Z3_dec_ref(ctx, Z3_func_decl_to_ast(ctx, e.consts[i]).unwrap());
+                    Z3_dec_ref(ctx, Z3_func_decl_to_ast(ctx, e.testers[i]).unwrap())
                 }
-                Z3_dec_ref(ctx, Z3_sort_to_ast(ctx, e.sort))
+                Z3_dec_ref(ctx, Z3_sort_to_ast(ctx, e.sort).unwrap())
             }
         }
     }
@@ -628,16 +628,16 @@ impl<'ctx> Sort<'ctx> {
         assert!(ebits > 1 && sbits > 2);
 
         unsafe {
-            let z3_sort = Z3_mk_fpa_sort(ctx.z3_ctx, ebits, sbits);
-            Z3_inc_ref(ctx.z3_ctx, Z3_sort_to_ast(ctx.z3_ctx, z3_sort));
+            let z3_sort = Z3_mk_fpa_sort(ctx.z3_ctx, ebits, sbits).unwrap();
+            Z3_inc_ref(ctx.z3_ctx, Z3_sort_to_ast(ctx.z3_ctx, z3_sort).unwrap());
             Sort { z3_sort, ctx }
         }
     }
 
     fn bitvec(ctx: &'ctx Context, sz: u32) -> Self {
         unsafe {
-            let z3_sort = Z3_mk_bv_sort(ctx.z3_ctx, sz);
-            Z3_inc_ref(ctx.z3_ctx, Z3_sort_to_ast(ctx.z3_ctx, z3_sort));
+            let z3_sort = Z3_mk_bv_sort(ctx.z3_ctx, sz).unwrap();
+            Z3_inc_ref(ctx.z3_ctx, Z3_sort_to_ast(ctx.z3_ctx, z3_sort).unwrap());
             Sort { z3_sort, ctx }
         }
     }
@@ -646,27 +646,27 @@ impl<'ctx> Sort<'ctx> {
         unsafe {
             match ty {
                 Ty::Bool => {
-                    let z3_sort = Z3_mk_bool_sort(ctx.z3_ctx);
-                    Z3_inc_ref(ctx.z3_ctx, Z3_sort_to_ast(ctx.z3_ctx, z3_sort));
+                    let z3_sort = Z3_mk_bool_sort(ctx.z3_ctx).unwrap();
+                    Z3_inc_ref(ctx.z3_ctx, Z3_sort_to_ast(ctx.z3_ctx, z3_sort).unwrap());
                     Sort { z3_sort, ctx }
                 }
                 Ty::BitVec(sz) => Self::bitvec(ctx, *sz),
                 Ty::Enum(e) => {
                     let z3_sort = enums.enums[&e.id].sort;
-                    Z3_inc_ref(ctx.z3_ctx, Z3_sort_to_ast(ctx.z3_ctx, z3_sort));
+                    Z3_inc_ref(ctx.z3_ctx, Z3_sort_to_ast(ctx.z3_ctx, z3_sort).unwrap());
                     Sort { z3_sort, ctx }
                 }
                 Ty::Array(dom, codom) => {
                     let dom_s = Self::new(ctx, enums, dom);
                     let codom_s = Self::new(ctx, enums, codom);
-                    let z3_sort = Z3_mk_array_sort(ctx.z3_ctx, dom_s.z3_sort, codom_s.z3_sort);
-                    Z3_inc_ref(ctx.z3_ctx, Z3_sort_to_ast(ctx.z3_ctx, z3_sort));
+                    let z3_sort = Z3_mk_array_sort(ctx.z3_ctx, dom_s.z3_sort, codom_s.z3_sort).unwrap();
+                    Z3_inc_ref(ctx.z3_ctx, Z3_sort_to_ast(ctx.z3_ctx, z3_sort).unwrap());
                     Sort { z3_sort, ctx }
                 }
                 Ty::Float(ebits, sbits) => Self::float(ctx, *ebits, *sbits),
                 Ty::RoundingMode => {
-                    let z3_sort = Z3_mk_fpa_rounding_mode_sort(ctx.z3_ctx);
-                    Z3_inc_ref(ctx.z3_ctx, Z3_sort_to_ast(ctx.z3_ctx, z3_sort));
+                    let z3_sort = Z3_mk_fpa_rounding_mode_sort(ctx.z3_ctx).unwrap();
+                    Z3_inc_ref(ctx.z3_ctx, Z3_sort_to_ast(ctx.z3_ctx, z3_sort).unwrap());
                     Sort { z3_sort, ctx }
                 }
             }
@@ -678,7 +678,7 @@ impl Drop for Sort<'_> {
     fn drop(&mut self) {
         unsafe {
             let ctx = self.ctx.z3_ctx;
-            Z3_dec_ref(ctx, Z3_sort_to_ast(ctx, self.z3_sort))
+            Z3_dec_ref(ctx, Z3_sort_to_ast(ctx, self.z3_sort).unwrap())
         }
     }
 }
@@ -691,13 +691,13 @@ struct FuncDecl<'ctx> {
 impl<'ctx> FuncDecl<'ctx> {
     fn new(ctx: &'ctx Context, v: Sym, enums: &Enums<'ctx>, arg_tys: &[Ty], ty: &Ty) -> Self {
         unsafe {
-            let name = Z3_mk_int_symbol(ctx.z3_ctx, v.id as c_int);
+            let name = Z3_mk_int_symbol(ctx.z3_ctx, v.id as c_int).unwrap();
             let arg_sorts: Vec<Sort> = arg_tys.iter().map(|ty| Sort::new(ctx, enums, ty)).collect();
             let arg_z3_sorts: Vec<Z3_sort> = arg_sorts.iter().map(|s| s.z3_sort).collect();
             let args: u32 = arg_sorts.len() as u32;
             let z3_func_decl =
-                Z3_mk_func_decl(ctx.z3_ctx, name, args, arg_z3_sorts.as_ptr(), Sort::new(ctx, enums, ty).z3_sort);
-            Z3_inc_ref(ctx.z3_ctx, Z3_func_decl_to_ast(ctx.z3_ctx, z3_func_decl));
+                Z3_mk_func_decl(ctx.z3_ctx, name, args, arg_z3_sorts.as_ptr(), Sort::new(ctx, enums, ty).z3_sort).unwrap();
+            Z3_inc_ref(ctx.z3_ctx, Z3_func_decl_to_ast(ctx.z3_ctx, z3_func_decl).unwrap());
             FuncDecl { z3_func_decl, ctx }
         }
     }
@@ -707,7 +707,7 @@ impl Drop for FuncDecl<'_> {
     fn drop(&mut self) {
         unsafe {
             let ctx = self.ctx.z3_ctx;
-            Z3_dec_ref(ctx, Z3_func_decl_to_ast(ctx, self.z3_func_decl))
+            Z3_dec_ref(ctx, Z3_func_decl_to_ast(ctx, self.z3_func_decl).unwrap())
         }
     }
 }
@@ -730,7 +730,7 @@ impl Clone for Ast<'_> {
 macro_rules! z3_nullary_op {
     ($i:ident, $ctx:ident) => {
         unsafe {
-            let z3_ast = $i($ctx.z3_ctx);
+            let z3_ast = $i($ctx.z3_ctx).unwrap();
             Z3_inc_ref($ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: $ctx }
         }
@@ -740,7 +740,7 @@ macro_rules! z3_nullary_op {
 macro_rules! z3_unary_op {
     ($i:ident, $arg:ident) => {
         unsafe {
-            let z3_ast = $i($arg.ctx.z3_ctx, $arg.z3_ast);
+            let z3_ast = $i($arg.ctx.z3_ctx, $arg.z3_ast).unwrap();
             Z3_inc_ref($arg.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: $arg.ctx }
         }
@@ -750,7 +750,7 @@ macro_rules! z3_unary_op {
 macro_rules! z3_binary_op {
     ($i:ident, $lhs:ident, $rhs:ident) => {
         unsafe {
-            let z3_ast = $i($lhs.ctx.z3_ctx, $lhs.z3_ast, $rhs.z3_ast);
+            let z3_ast = $i($lhs.ctx.z3_ctx, $lhs.z3_ast, $rhs.z3_ast).unwrap();
             Z3_inc_ref($lhs.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: $lhs.ctx }
         }
@@ -760,7 +760,7 @@ macro_rules! z3_binary_op {
 macro_rules! z3_float_binary_op {
     ($i:ident, $rm:ident, $lhs:ident, $rhs:ident) => {
         unsafe {
-            let z3_ast = $i($lhs.ctx.z3_ctx, $rm.z3_ast, $lhs.z3_ast, $rhs.z3_ast);
+            let z3_ast = $i($lhs.ctx.z3_ctx, $rm.z3_ast, $lhs.z3_ast, $rhs.z3_ast).unwrap();
             Z3_inc_ref($lhs.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: $rm.ctx }
         }
@@ -774,19 +774,19 @@ static BV_SORT_AC: &[u8] = b"bv_sort_ac\0";
 impl<'ctx> Ast<'ctx> {
     fn simplify(&mut self) {
         unsafe {
-            let z3_params = Z3_mk_params(self.ctx.z3_ctx);
+            let z3_params = Z3_mk_params(self.ctx.z3_ctx).unwrap();
             let push_ite_bv =
-                Z3_mk_string_symbol(self.ctx.z3_ctx, CStr::from_bytes_with_nul_unchecked(PUSH_ITE_BV).as_ptr());
+                Z3_mk_string_symbol(self.ctx.z3_ctx, CStr::from_bytes_with_nul_unchecked(PUSH_ITE_BV).as_ptr()).unwrap();
             let bv_le_extra =
-                Z3_mk_string_symbol(self.ctx.z3_ctx, CStr::from_bytes_with_nul_unchecked(BV_LE_EXTRA).as_ptr());
+                Z3_mk_string_symbol(self.ctx.z3_ctx, CStr::from_bytes_with_nul_unchecked(BV_LE_EXTRA).as_ptr()).unwrap();
             let bv_sort_ac =
-                Z3_mk_string_symbol(self.ctx.z3_ctx, CStr::from_bytes_with_nul_unchecked(BV_SORT_AC).as_ptr());
+                Z3_mk_string_symbol(self.ctx.z3_ctx, CStr::from_bytes_with_nul_unchecked(BV_SORT_AC).as_ptr()).unwrap();
             Z3_params_inc_ref(self.ctx.z3_ctx, z3_params);
             Z3_params_set_bool(self.ctx.z3_ctx, z3_params, push_ite_bv, true);
             Z3_params_set_bool(self.ctx.z3_ctx, z3_params, bv_le_extra, true);
             Z3_params_set_bool(self.ctx.z3_ctx, z3_params, bv_sort_ac, true);
 
-            let z3_ast = Z3_simplify_ex(self.ctx.z3_ctx, self.z3_ast, z3_params);
+            let z3_ast = Z3_simplify_ex(self.ctx.z3_ctx, self.z3_ast, z3_params).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Z3_dec_ref(self.ctx.z3_ctx, self.z3_ast);
             self.z3_ast = z3_ast;
@@ -797,7 +797,7 @@ impl<'ctx> Ast<'ctx> {
 
     fn mk_constant(fd: &FuncDecl<'ctx>) -> Self {
         unsafe {
-            let z3_ast = Z3_mk_app(fd.ctx.z3_ctx, fd.z3_func_decl, 0, ptr::null());
+            let z3_ast = Z3_mk_app(fd.ctx.z3_ctx, fd.z3_func_decl, 0, ptr::null()).unwrap();
             Z3_inc_ref(fd.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: fd.ctx }
         }
@@ -807,7 +807,7 @@ impl<'ctx> Ast<'ctx> {
         unsafe {
             let z3_args: Vec<Z3_ast> = args.iter().map(|ast| ast.z3_ast).collect();
             let len = z3_args.len() as u32;
-            let z3_ast = Z3_mk_app(fd.ctx.z3_ctx, fd.z3_func_decl, len, z3_args.as_ptr());
+            let z3_ast = Z3_mk_app(fd.ctx.z3_ctx, fd.z3_func_decl, len, z3_args.as_ptr()).unwrap();
             Z3_inc_ref(fd.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: fd.ctx }
         }
@@ -816,7 +816,7 @@ impl<'ctx> Ast<'ctx> {
     fn mk_enum_member(enums: &Enums<'ctx>, enum_id: EnumId, member: usize) -> Self {
         unsafe {
             let func_decl = enums.enums[&enum_id.id].consts[member];
-            let z3_ast = Z3_mk_app(enums.ctx.z3_ctx, func_decl, 0, ptr::null());
+            let z3_ast = Z3_mk_app(enums.ctx.z3_ctx, func_decl, 0, ptr::null()).unwrap();
             Z3_inc_ref(enums.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: enums.ctx }
         }
@@ -825,7 +825,7 @@ impl<'ctx> Ast<'ctx> {
     fn mk_bv_u64(ctx: &'ctx Context, sz: u32, bits: u64) -> Self {
         unsafe {
             let sort = Sort::bitvec(ctx, sz);
-            let z3_ast = Z3_mk_unsigned_int64(ctx.z3_ctx, bits, sort.z3_sort);
+            let z3_ast = Z3_mk_unsigned_int64(ctx.z3_ctx, bits, sort.z3_sort).unwrap();
             Z3_inc_ref(ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx }
         }
@@ -833,7 +833,7 @@ impl<'ctx> Ast<'ctx> {
 
     fn mk_bv(ctx: &'ctx Context, sz: u32, bits: &[bool]) -> Self {
         unsafe {
-            let z3_ast = Z3_mk_bv_numeral(ctx.z3_ctx, sz, bits.as_ptr());
+            let z3_ast = Z3_mk_bv_numeral(ctx.z3_ctx, sz, bits.as_ptr()).unwrap();
             Z3_inc_ref(ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx }
         }
@@ -842,7 +842,7 @@ impl<'ctx> Ast<'ctx> {
     fn mk_fpa_nan(ctx: &'ctx Context, ebits: u32, sbits: u32) -> Self {
         unsafe {
             let sort = Sort::float(ctx, ebits, sbits);
-            let z3_ast = Z3_mk_fpa_nan(ctx.z3_ctx, sort.z3_sort);
+            let z3_ast = Z3_mk_fpa_nan(ctx.z3_ctx, sort.z3_sort).unwrap();
             Z3_inc_ref(ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx }
         }
@@ -851,7 +851,7 @@ impl<'ctx> Ast<'ctx> {
     fn mk_fpa_zero(ctx: &'ctx Context, ebits: u32, sbits: u32, negative: bool) -> Self {
         unsafe {
             let sort = Sort::float(ctx, ebits, sbits);
-            let z3_ast = Z3_mk_fpa_zero(ctx.z3_ctx, sort.z3_sort, negative);
+            let z3_ast = Z3_mk_fpa_zero(ctx.z3_ctx, sort.z3_sort, negative).unwrap();
             Z3_inc_ref(ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx }
         }
@@ -860,7 +860,7 @@ impl<'ctx> Ast<'ctx> {
     fn mk_fpa_inf(ctx: &'ctx Context, ebits: u32, sbits: u32, negative: bool) -> Self {
         unsafe {
             let sort = Sort::float(ctx, ebits, sbits);
-            let z3_ast = Z3_mk_fpa_inf(ctx.z3_ctx, sort.z3_sort, negative);
+            let z3_ast = Z3_mk_fpa_inf(ctx.z3_ctx, sort.z3_sort, negative).unwrap();
             Z3_inc_ref(ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx }
         }
@@ -868,7 +868,7 @@ impl<'ctx> Ast<'ctx> {
 
     fn mk_bool(ctx: &'ctx Context, b: bool) -> Self {
         unsafe {
-            let z3_ast = if b { Z3_mk_true(ctx.z3_ctx) } else { Z3_mk_false(ctx.z3_ctx) };
+            let z3_ast = if b { Z3_mk_true(ctx.z3_ctx).unwrap() } else { Z3_mk_false(ctx.z3_ctx).unwrap() };
             Z3_inc_ref(ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx }
         }
@@ -908,7 +908,7 @@ impl<'ctx> Ast<'ctx> {
 
     fn mk_and(&self, rhs: &Ast<'ctx>) -> Self {
         unsafe {
-            let z3_ast = Z3_mk_and(self.ctx.z3_ctx, 2, &[self.z3_ast, rhs.z3_ast] as *const Z3_ast);
+            let z3_ast = Z3_mk_and(self.ctx.z3_ctx, 2, &[self.z3_ast, rhs.z3_ast] as *const Z3_ast).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: self.ctx }
         }
@@ -916,7 +916,7 @@ impl<'ctx> Ast<'ctx> {
 
     fn mk_or(&self, rhs: &Ast<'ctx>) -> Self {
         unsafe {
-            let z3_ast = Z3_mk_or(self.ctx.z3_ctx, 2, &[self.z3_ast, rhs.z3_ast] as *const Z3_ast);
+            let z3_ast = Z3_mk_or(self.ctx.z3_ctx, 2, &[self.z3_ast, rhs.z3_ast] as *const Z3_ast).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: self.ctx }
         }
@@ -924,7 +924,7 @@ impl<'ctx> Ast<'ctx> {
 
     fn extract(&self, hi: u32, lo: u32) -> Self {
         unsafe {
-            let z3_ast = Z3_mk_extract(self.ctx.z3_ctx, hi, lo, self.z3_ast);
+            let z3_ast = Z3_mk_extract(self.ctx.z3_ctx, hi, lo, self.z3_ast).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: self.ctx }
         }
@@ -932,7 +932,7 @@ impl<'ctx> Ast<'ctx> {
 
     fn zero_extend(&self, i: u32) -> Self {
         unsafe {
-            let z3_ast = Z3_mk_zero_ext(self.ctx.z3_ctx, i, self.z3_ast);
+            let z3_ast = Z3_mk_zero_ext(self.ctx.z3_ctx, i, self.z3_ast).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: self.ctx }
         }
@@ -940,7 +940,7 @@ impl<'ctx> Ast<'ctx> {
 
     fn sign_extend(&self, i: u32) -> Self {
         unsafe {
-            let z3_ast = Z3_mk_sign_ext(self.ctx.z3_ctx, i, self.z3_ast);
+            let z3_ast = Z3_mk_sign_ext(self.ctx.z3_ctx, i, self.z3_ast).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: self.ctx }
         }
@@ -948,7 +948,7 @@ impl<'ctx> Ast<'ctx> {
 
     fn ite(&self, true_exp: &Ast<'ctx>, false_exp: &Ast<'ctx>) -> Self {
         unsafe {
-            let z3_ast = Z3_mk_ite(self.ctx.z3_ctx, self.z3_ast, true_exp.z3_ast, false_exp.z3_ast);
+            let z3_ast = Z3_mk_ite(self.ctx.z3_ctx, self.z3_ast, true_exp.z3_ast, false_exp.z3_ast).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: self.ctx }
         }
@@ -1092,7 +1092,7 @@ impl<'ctx> Ast<'ctx> {
 
     fn mk_fpa_fma(&self, t1: &Ast<'ctx>, t2: &Ast<'ctx>, t3: &Ast<'ctx>) -> Self {
         unsafe {
-            let z3_ast = Z3_mk_fpa_fma(self.ctx.z3_ctx, self.z3_ast, t1.z3_ast, t2.z3_ast, t3.z3_ast);
+            let z3_ast = Z3_mk_fpa_fma(self.ctx.z3_ctx, self.z3_ast, t1.z3_ast, t2.z3_ast, t3.z3_ast).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: self.ctx }
         }
@@ -1169,7 +1169,7 @@ impl<'ctx> Ast<'ctx> {
     fn mk_fpa_to_fp_bv(&self, ebits: u32, sbits: u32) -> Self {
         unsafe {
             let sort = Sort::float(self.ctx, ebits, sbits);
-            let z3_ast = Z3_mk_fpa_to_fp_bv(self.ctx.z3_ctx, self.z3_ast, sort.z3_sort);
+            let z3_ast = Z3_mk_fpa_to_fp_bv(self.ctx.z3_ctx, self.z3_ast, sort.z3_sort).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: self.ctx }
         }
@@ -1178,7 +1178,7 @@ impl<'ctx> Ast<'ctx> {
     fn mk_fpa_to_fp_float(&self, exp: &Ast<'ctx>, ebits: u32, sbits: u32) -> Self {
         unsafe {
             let sort = Sort::float(self.ctx, ebits, sbits);
-            let z3_ast = Z3_mk_fpa_to_fp_float(self.ctx.z3_ctx, self.z3_ast, exp.z3_ast, sort.z3_sort);
+            let z3_ast = Z3_mk_fpa_to_fp_float(self.ctx.z3_ctx, self.z3_ast, exp.z3_ast, sort.z3_sort).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: self.ctx }
         }
@@ -1187,7 +1187,7 @@ impl<'ctx> Ast<'ctx> {
     fn mk_fpa_to_fp_signed(&self, exp: &Ast<'ctx>, ebits: u32, sbits: u32) -> Self {
         unsafe {
             let sort = Sort::float(self.ctx, ebits, sbits);
-            let z3_ast = Z3_mk_fpa_to_fp_signed(self.ctx.z3_ctx, self.z3_ast, exp.z3_ast, sort.z3_sort);
+            let z3_ast = Z3_mk_fpa_to_fp_signed(self.ctx.z3_ctx, self.z3_ast, exp.z3_ast, sort.z3_sort).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: self.ctx }
         }
@@ -1196,7 +1196,7 @@ impl<'ctx> Ast<'ctx> {
     fn mk_fpa_to_fp_unsigned(&self, exp: &Ast<'ctx>, ebits: u32, sbits: u32) -> Self {
         unsafe {
             let sort = Sort::float(self.ctx, ebits, sbits);
-            let z3_ast = Z3_mk_fpa_to_fp_unsigned(self.ctx.z3_ctx, self.z3_ast, exp.z3_ast, sort.z3_sort);
+            let z3_ast = Z3_mk_fpa_to_fp_unsigned(self.ctx.z3_ctx, self.z3_ast, exp.z3_ast, sort.z3_sort).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: self.ctx }
         }
@@ -1204,7 +1204,7 @@ impl<'ctx> Ast<'ctx> {
 
     fn mk_fpa_to_sbv(&self, exp: &Ast<'ctx>, sz: u32) -> Self {
         unsafe {
-            let z3_ast = Z3_mk_fpa_to_sbv(self.ctx.z3_ctx, self.z3_ast, exp.z3_ast, sz);
+            let z3_ast = Z3_mk_fpa_to_sbv(self.ctx.z3_ctx, self.z3_ast, exp.z3_ast, sz).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: self.ctx }
         }
@@ -1212,7 +1212,7 @@ impl<'ctx> Ast<'ctx> {
 
     fn mk_fpa_to_ubv(&self, exp: &Ast<'ctx>, sz: u32) -> Self {
         unsafe {
-            let z3_ast = Z3_mk_fpa_to_ubv(self.ctx.z3_ctx, self.z3_ast, exp.z3_ast, sz);
+            let z3_ast = Z3_mk_fpa_to_ubv(self.ctx.z3_ctx, self.z3_ast, exp.z3_ast, sz).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: self.ctx }
         }
@@ -1220,7 +1220,7 @@ impl<'ctx> Ast<'ctx> {
 
     fn mk_store(&self, index: &Ast<'ctx>, val: &Ast<'ctx>) -> Self {
         unsafe {
-            let z3_ast = Z3_mk_store(self.ctx.z3_ctx, self.z3_ast, index.z3_ast, val.z3_ast);
+            let z3_ast = Z3_mk_store(self.ctx.z3_ctx, self.z3_ast, index.z3_ast, val.z3_ast).unwrap();
             Z3_inc_ref(self.ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx: self.ctx }
         }
@@ -1230,7 +1230,7 @@ impl<'ctx> Ast<'ctx> {
         unsafe {
             let z3_args: Vec<Z3_ast> = args.iter().map(|ast| ast.z3_ast).collect();
             let len = z3_args.len() as u32;
-            let z3_ast = Z3_mk_distinct(ctx.z3_ctx, len, z3_args.as_ptr());
+            let z3_ast = Z3_mk_distinct(ctx.z3_ctx, len, z3_args.as_ptr()).unwrap();
             Z3_inc_ref(ctx.z3_ctx, z3_ast);
             Ast { z3_ast, ctx }
         }
@@ -1528,7 +1528,7 @@ impl ModelVal {
 impl<'ctx, B: BV> Model<'ctx, B> {
     pub fn new(solver: &'ctx Solver<'ctx, B>) -> Self {
         unsafe {
-            let z3_model = Z3_solver_get_model(solver.ctx.z3_ctx, solver.z3_solver);
+            let z3_model = Z3_solver_get_model(solver.ctx.z3_ctx, solver.z3_solver).unwrap();
             Z3_model_inc_ref(solver.ctx.z3_ctx, z3_model);
             Model { z3_model, solver, ctx: solver.ctx, complete_model: false }
         }
@@ -1550,10 +1550,11 @@ impl<'ctx, B: BV> Model<'ctx, B> {
             let result_ast: Ast;
 
             unsafe {
-                let mut result_z3_ast: Z3_ast = ptr::null_mut();
-                if !Z3_model_eval(self.ctx.z3_ctx, self.z3_model, extract_ast.z3_ast, true, &mut result_z3_ast) {
+                let mut result_z3_ast = mem::MaybeUninit::<Z3_ast>::uninit();
+                if !Z3_model_eval(self.ctx.z3_ctx, self.z3_model, extract_ast.z3_ast, true, result_z3_ast.as_mut_ptr()) {
                     return Err(self.ctx.error());
                 }
+                let result_z3_ast = result_z3_ast.assume_init();
                 Z3_inc_ref(self.ctx.z3_ctx, result_z3_ast);
                 result_ast = Ast { z3_ast: result_z3_ast, ctx: self.ctx };
             }
@@ -1583,19 +1584,20 @@ impl<'ctx, B: BV> Model<'ctx, B> {
     fn get_ast(&mut self, var_ast: Ast) -> Result<ModelVal, ExecError> {
         unsafe {
             let z3_ctx = self.ctx.z3_ctx;
-            let mut z3_ast: Z3_ast = ptr::null_mut();
-            if !Z3_model_eval(z3_ctx, self.z3_model, var_ast.z3_ast, self.complete_model, &mut z3_ast) {
+            let mut z3_ast = mem::MaybeUninit::<Z3_ast>::uninit();
+            if !Z3_model_eval(z3_ctx, self.z3_model, var_ast.z3_ast, self.complete_model, z3_ast.as_mut_ptr()) {
                 return Err(self.ctx.error());
             }
+            let z3_ast = z3_ast.assume_init();
             Z3_inc_ref(z3_ctx, z3_ast);
 
             let ast = Ast { z3_ast, ctx: self.ctx };
 
-            let sort = Z3_get_sort(z3_ctx, ast.z3_ast);
-            Z3_inc_ref(z3_ctx, Z3_sort_to_ast(z3_ctx, sort));
+            let sort = Z3_get_sort(z3_ctx, ast.z3_ast).unwrap();
+            Z3_inc_ref(z3_ctx, Z3_sort_to_ast(z3_ctx, sort).unwrap());
             let sort_kind = Z3_get_sort_kind(z3_ctx, sort);
 
-            let result = if sort_kind == SortKind::BV && Z3_is_numeral_ast(z3_ctx, z3_ast) {
+            let result = if sort_kind == SortKind::Bv && Z3_is_numeral_ast(z3_ctx, z3_ast) {
                 let size = Z3_get_bv_sort_size(z3_ctx, sort);
                 if size > 64 {
                     let v = self.get_large_bv(ast, size)?;
@@ -1611,13 +1613,13 @@ impl<'ctx, B: BV> Model<'ctx, B> {
                     // Model did not need to assign an interpretation to this variable
                     Ok(ModelVal::Arbitrary(Ty::Bool))
                 }
-            } else if sort_kind == SortKind::BV {
+            } else if sort_kind == SortKind::Bv {
                 let size = Z3_get_bv_sort_size(z3_ctx, sort);
                 // Model did not need to assign an interpretation to this variable
                 Ok(ModelVal::Arbitrary(Ty::BitVec(size)))
             } else if sort_kind == SortKind::Datatype {
-                let func_decl = Z3_get_app_decl(z3_ctx, Z3_to_app(z3_ctx, z3_ast));
-                Z3_inc_ref(z3_ctx, Z3_func_decl_to_ast(z3_ctx, func_decl));
+                let func_decl = Z3_get_app_decl(z3_ctx, Z3_to_app(z3_ctx, z3_ast).unwrap()).unwrap();
+                Z3_inc_ref(z3_ctx, Z3_func_decl_to_ast(z3_ctx, func_decl).unwrap());
 
                 let mut result = Err(ExecError::NoModel);
 
@@ -1635,13 +1637,13 @@ impl<'ctx, B: BV> Model<'ctx, B> {
                     }
                 }
 
-                Z3_dec_ref(z3_ctx, Z3_func_decl_to_ast(z3_ctx, func_decl));
+                Z3_dec_ref(z3_ctx, Z3_func_decl_to_ast(z3_ctx, func_decl).unwrap());
                 result
             } else {
                 Err(ExecError::Type("get_ast".to_string(), SourceLoc::unknown()))
             };
 
-            Z3_dec_ref(z3_ctx, Z3_sort_to_ast(z3_ctx, sort));
+            Z3_dec_ref(z3_ctx, Z3_sort_to_ast(z3_ctx, sort).unwrap());
             result
         }
     }
@@ -1692,9 +1694,9 @@ impl<'ctx, B: BV> Solver<'ctx, B> {
             // The QF_AUFBV solver has good performance on our problems, but we need to initialise it
             // using a tactic rather than the logic name to ensure that the enumerations are supported,
             // otherwise Z3 may crash.
-            let qfaufbv_tactic = Z3_mk_tactic(ctx.z3_ctx, CStr::from_bytes_with_nul_unchecked(QFAUFBV_STR).as_ptr());
+            let qfaufbv_tactic = Z3_mk_tactic(ctx.z3_ctx, CStr::from_bytes_with_nul_unchecked(QFAUFBV_STR).as_ptr()).unwrap();
             Z3_tactic_inc_ref(ctx.z3_ctx, qfaufbv_tactic);
-            let z3_solver = Z3_mk_solver_from_tactic(ctx.z3_ctx, qfaufbv_tactic);
+            let z3_solver = Z3_mk_solver_from_tactic(ctx.z3_ctx, qfaufbv_tactic).unwrap();
             Z3_solver_inc_ref(ctx.z3_ctx, z3_solver);
 
             Solver {
@@ -1935,14 +1937,14 @@ impl<'ctx, B: BV> Solver<'ctx, B> {
         match self.decls.get(&v) {
             Some(ast) => unsafe {
                 let z3_ctx = self.ctx.z3_ctx;
-                let z3_sort = Z3_get_sort(z3_ctx, ast.z3_ast);
-                Z3_inc_ref(z3_ctx, Z3_sort_to_ast(z3_ctx, z3_sort));
-                if Z3_get_sort_kind(z3_ctx, z3_sort) == SortKind::BV {
+                let z3_sort = Z3_get_sort(z3_ctx, ast.z3_ast).unwrap();
+                Z3_inc_ref(z3_ctx, Z3_sort_to_ast(z3_ctx, z3_sort).unwrap());
+                if Z3_get_sort_kind(z3_ctx, z3_sort) == SortKind::Bv {
                     let sz = Z3_get_bv_sort_size(z3_ctx, z3_sort);
-                    Z3_dec_ref(z3_ctx, Z3_sort_to_ast(z3_ctx, z3_sort));
+                    Z3_dec_ref(z3_ctx, Z3_sort_to_ast(z3_ctx, z3_sort).unwrap());
                     Some(sz)
                 } else {
-                    Z3_dec_ref(z3_ctx, Z3_sort_to_ast(z3_ctx, z3_sort));
+                    Z3_dec_ref(z3_ctx, Z3_sort_to_ast(z3_ctx, z3_sort).unwrap());
                     None
                 }
             },
@@ -1954,10 +1956,10 @@ impl<'ctx, B: BV> Solver<'ctx, B> {
         match self.decls.get(&v) {
             Some(ast) => unsafe {
                 let z3_ctx = self.ctx.z3_ctx;
-                let z3_sort = Z3_get_sort(z3_ctx, ast.z3_ast);
-                Z3_inc_ref(z3_ctx, Z3_sort_to_ast(z3_ctx, z3_sort));
-                let result = Z3_get_sort_kind(z3_ctx, z3_sort) == SortKind::BV;
-                Z3_dec_ref(z3_ctx, Z3_sort_to_ast(z3_ctx, z3_sort));
+                let z3_sort = Z3_get_sort(z3_ctx, ast.z3_ast).unwrap();
+                Z3_inc_ref(z3_ctx, Z3_sort_to_ast(z3_ctx, z3_sort).unwrap());
+                let result = Z3_get_sort_kind(z3_ctx, z3_sort) == SortKind::Bv;
+                Z3_dec_ref(z3_ctx, Z3_sort_to_ast(z3_ctx, z3_sort).unwrap());
                 result
             },
             None => false,
