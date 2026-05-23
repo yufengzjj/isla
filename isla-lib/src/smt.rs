@@ -1732,6 +1732,11 @@ impl<'ctx, B: BV> Solver<'ctx, B> {
             Z3_tactic_inc_ref(ctx.z3_ctx, qfaufbv_tactic);
             let z3_solver = Z3_mk_solver_from_tactic(ctx.z3_ctx, qfaufbv_tactic).unwrap();
             Z3_solver_inc_ref(ctx.z3_ctx, z3_solver);
+            // The solver now holds its own reference to the tactic; drop our
+            // local one. Without this, every Solver::new leaks one
+            // Z3_tactic_ref, surfacing as `WARNING: Uncollected memory:
+            // 0: struct Z3_tactic_ref` at process exit.
+            Z3_tactic_dec_ref(ctx.z3_ctx, qfaufbv_tactic);
 
             Solver {
                 ctx,
